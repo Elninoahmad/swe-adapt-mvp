@@ -37,3 +37,5 @@ jobs:
         with:
           name: scripted-mock-artifacts
           path: mock-run-artifacts/
+      - name: Run report tests
+        run: python -m pytest tests/test_report.py -v
