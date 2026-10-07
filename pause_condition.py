@@ -1,12 +1,21 @@
-"""Pause-condition detector for SWE-Adapt Task 01."""
+"""Pause-condition detector for SWE-Adapt Task 01.
+
+Returns true only when:
+  1. validators.py exists
+  2. Both services import from validators AND call the imported function (AST-checked)
+  3. The duplicated regex pattern is absent from both services
+  4. pytest exits 0
+"""
 
 import ast
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
+
+from harness.test_runner import LocalTestRunner
 
 _DUPLICATED_PATTERN = r'^[\w\.-]+@[\w\.-]+\.\w+$'
-_TEST_TIMEOUT = 30  # seconds
 
 
 def _validators_exists(repo: Path) -> bool:
@@ -65,24 +74,8 @@ def _service_uses_validator(repo: Path, service_name: str) -> tuple[bool, str]:
     return True, "ok"
 
 
-def _tests_pass(repo: Path) -> tuple[bool, str]:
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", str(repo / "tests")],
-            cwd=str(repo),
-            capture_output=True,
-            text=True,
-            timeout=_TEST_TIMEOUT,
-        )
-    except subprocess.TimeoutExpired:
-        return False, "pytest timed out"
-
-    if result.returncode != 0:
-        return False, f"pytest failed (exit {result.returncode})"
-    return True, "ok"
-
-
-def is_paused(repo_path: str | Path) -> tuple[bool, str]:
+def is_paused(repo_path: str | Path, test_runner=None) -> tuple[bool, str]:
+    """Return (paused: bool, reason: str)."""
     repo = Path(repo_path)
 
     if not _validators_exists(repo):
@@ -96,7 +89,9 @@ def is_paused(repo_path: str | Path) -> tuple[bool, str]:
     if not _regex_removed(repo):
         return False, "duplicated regex still present in services"
 
-    ok, reason = _tests_pass(repo)
+    if test_runner is None:
+        test_runner = LocalTestRunner()
+    ok, reason = test_runner.run(repo)
     if not ok:
         return False, reason
 
