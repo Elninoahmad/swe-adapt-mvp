@@ -2,9 +2,9 @@
 
 MVP benchmark for testing how coding agents adapt to changing software requirements.
 
-&gt; **Status: scripted mock only.** Every result produced by this repo so far comes from
-&gt; hardcoded fake agent responses. **No real agent run exists, and no leaderboard
-&gt; result exists.** Nothing here is a validated measure of agent capability yet.
+> **Status: scripted mock only.** Every result so far comes from hardcoded fake agent responses.
+> **No real agent run or leaderboard result exists.** This is not a validated measure of agent capability.
+
 
 ## What exists today
 
