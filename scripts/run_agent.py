@@ -36,6 +36,7 @@ from harness.test_runner import (
     DockerAcceptanceRunner,
     DockerInfrastructureError,
     DockerTestRunner,
+    _docker_env,
 )
 from scripts.generate_report import generate
 
@@ -153,6 +154,7 @@ def _docker_preflight(image: str) -> None:
             capture_output=True,
             text=True,
             timeout=30,
+            env=_docker_env(),
         )
     except FileNotFoundError:
         raise DockerInfrastructureError("Docker CLI not found")
@@ -169,6 +171,7 @@ def _docker_preflight(image: str) -> None:
             capture_output=True,
             text=True,
             timeout=30,
+            env=_docker_env(),
         )
     except FileNotFoundError:
         raise DockerInfrastructureError("Docker CLI not found")
