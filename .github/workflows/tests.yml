@@ -61,3 +61,5 @@ jobs:
         run: python -m pytest tests/test_docker_runner.py tests/test_live_mode.py tests/test_docker_integration.py -v
       - name: Verify Docker final acceptance
         run: python -m pytest tests/test_docker_acceptance.py -v
+      - name: End-to-end Docker test with fake agent
+        run: python -m pytest tests/test_end_to_end.py -v
