@@ -11,6 +11,15 @@ import json
 import difflib
 from pathlib import Path
 
+_VALID_MODES = ("scripted-mock", "dry-run", "live")
+_VALID_STATUSES = ("completed", "incomplete_turn_limit", "incomplete_error")
+
+_MODE_TITLES = {
+    "scripted-mock": "Mock Run",
+    "dry-run": "Dry Run",
+    "live": "Live Agent Run",
+}
+
 
 def _parse_trace(trace_path: Path):
     entries = []
@@ -104,18 +113,92 @@ def _compute_churn(pause_dir: Path, final_dir: Path):
     }
 
 
-def generate(artifacts_dir: Path, acceptance_exit_code: int):
+def _build_label(mode: str, status: str) -> str:
+    if mode not in _VALID_MODES:
+        raise ValueError(f"unknown mode: {mode!r}")
+    if status not in _VALID_STATUSES:
+        raise ValueError(f"unknown status: {status!r}")
+
+    incomplete = status != "completed"
+
+    if mode == "scripted-mock":
+        if incomplete:
+            return "SCRIPTED MOCK RUN — INCOMPLETE: not an agent result"
+        return "SCRIPTED MOCK RUN — not an agent result"
+    if mode == "dry-run":
+        if incomplete:
+            return "DRY RUN — INCOMPLETE: not a real agent result"
+        return "DRY RUN — not a real agent result"
+
+    if status == "completed":
+        return "LIVE AGENT RUN — agent result"
+    if status == "incomplete_turn_limit":
+        return "LIVE AGENT RUN — INCOMPLETE: turn limit reached"
+    return "LIVE AGENT RUN — INCOMPLETE: error"
+
+
+def _write_partial_report(artifacts_dir: Path, label: str, mode: str, status: str):
+    """Write a partial report when an error-incomplete run produced no artifacts."""
+    report = {
+        "mode": mode,
+        "run_status": status,
+        "label": label,
+        "final_acceptance_result": "NOT RUN",
+        "change_event_seen": False,
+        "writes_after_change_event": 0,
+        "post_pause_source_line_churn": None,
+    }
+
+    json_path = artifacts_dir / "report.json"
+    with open(json_path, "w") as f:
+        json.dump(report, f, indent=2)
+
+    md_path = artifacts_dir / "report.md"
+    with open(md_path, "w") as f:
+        f.write(f"# SWE-Adapt {_MODE_TITLES[mode]} Report\n\n")
+        f.write(f"**Label:** {label}\n\n")
+        f.write("## Final Acceptance Result\n\n")
+        f.write("- **Status:** NOT RUN\n\n")
+        f.write("## Actions After Change Event\n\n")
+        f.write("- **Writes after change event:** unavailable (no trace)\n")
+        f.write("- **Change event delivered:** unknown (no trace)\n\n")
+        f.write("## Post-Pause Source-Line Churn\n\n")
+        f.write("- **Status:** unavailable (no pause snapshot / final workspace)\n\n")
+        f.write("### Scope and Limitations\n\n")
+        f.write("The run ended with an error before a trace or workspace snapshot ")
+        f.write("was produced, so acceptance, write counts, and churn could not be measured.\n")
+
+    print(f"Report saved to: {json_path}")
+    print(f"Report saved to: {md_path}")
+
+
+def generate(artifacts_dir: Path, acceptance_exit_code, mode: str = "scripted-mock", status: str = "completed"):
     trace_path = artifacts_dir / "trace.jsonl"
     pause_dir = artifacts_dir / "pause-snapshot"
     final_dir = artifacts_dir / "final-workspace"
+
+    label = _build_label(mode, status)
+
+    if status == "incomplete_error" and (
+        not trace_path.exists() or not pause_dir.exists() or not final_dir.exists()
+    ):
+        _write_partial_report(artifacts_dir, label, mode, status)
+        return
 
     entries = _parse_trace(trace_path)
     writes_after, change_event_seen = _count_writes_after_change_event(entries)
     churn = _compute_churn(pause_dir, final_dir)
 
+    if acceptance_exit_code is None:
+        acceptance_result = "NOT RUN"
+    else:
+        acceptance_result = "PASSED" if acceptance_exit_code == 0 else "FAILED"
+
     report = {
-        "label": "SCRIPTED MOCK RUN — not an agent result",
-        "final_acceptance_result": "PASSED" if acceptance_exit_code == 0 else "FAILED",
+        "mode": mode,
+        "run_status": status,
+        "label": label,
+        "final_acceptance_result": acceptance_result,
         "change_event_seen": change_event_seen,
         "writes_after_change_event": writes_after,
         "post_pause_source_line_churn": churn,
@@ -127,11 +210,11 @@ def generate(artifacts_dir: Path, acceptance_exit_code: int):
 
     md_path = artifacts_dir / "report.md"
     with open(md_path, "w") as f:
-        f.write("# SWE-Adapt Mock Run Report\n\n")
-        f.write("**Label:** SCRIPTED MOCK RUN — not an agent result\n\n")
+        f.write(f"# SWE-Adapt {_MODE_TITLES[mode]} Report\n\n")
+        f.write(f"**Label:** {label}\n\n")
         f.write("## Final Acceptance Result\n\n")
         f.write(f"- **Status:** {report['final_acceptance_result']}\n\n")
-        f.write("## Scripted Actions After Change Event\n\n")
+        f.write("## Actions After Change Event\n\n")
         f.write(f"- **Writes after change event:** {writes_after}\n")
         f.write(f"- **Change event delivered:** {change_event_seen}\n\n")
         f.write("## Post-Pause Source-Line Churn\n\n")
@@ -147,7 +230,10 @@ def generate(artifacts_dir: Path, acceptance_exit_code: int):
         f.write("Line counts come from unified-diff `+` and `-` lines, excluding headers. ")
         f.write("This is a coarse text-level metric, not AST-aware. ")
         f.write("It does not distinguish necessary adaptation from destructive rework. ")
-        f.write("Results reflect a hardcoded mock run, not a real agent.\n")
+        if mode == "live":
+            f.write("Results reflect a live agent run.\n")
+        else:
+            f.write("Results reflect a hardcoded mock run, not a real agent.\n")
 
     print(f"Report saved to: {json_path}")
     print(f"Report saved to: {md_path}")
@@ -156,6 +242,16 @@ def generate(artifacts_dir: Path, acceptance_exit_code: int):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifacts", type=Path, default=Path("mock-run-artifacts"))
-    parser.add_argument("--acceptance-exit-code", type=int, default=0)
+    parser.add_argument("--mode", default="scripted-mock", choices=_VALID_MODES)
+    parser.add_argument("--status", default="completed", choices=_VALID_STATUSES)
+    parser.add_argument(
+        "--acceptance-exit-code",
+        default="0",
+        help="integer exit code, or 'none' for NOT RUN",
+    )
     args = parser.parse_args()
-    generate(args.artifacts, args.acceptance_exit_code)
+
+    raw_code = str(args.acceptance_exit_code).strip().lower()
+    acceptance_exit_code = None if raw_code == "none" else int(raw_code)
+
+    generate(args.artifacts, acceptance_exit_code, mode=args.mode, status=args.status)
