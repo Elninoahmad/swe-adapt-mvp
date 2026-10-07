@@ -1,0 +1,84 @@
+name: task-01-live
+
+# Manual only. Never add push, pull_request, pull_request_target, or schedule.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Anthropic model for the live run"
+        required: true
+        type: string
+      max_turns:
+        description: "API request cap (positive integer)"
+        required: true
+        default: 8
+        type: number
+      max_tokens:
+        description: "Per-request output token cap (positive integer)"
+        required: true
+        default: 1024
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: task-01-live
+  cancel-in-progress: false
+
+env:
+  TESTER_IMAGE: swe-adapt-tester
+
+jobs:
+  live:
+    name: Task 01 live agent run
+    runs-on: ubuntu-latest          # ephemeral, GitHub-hosted; never self-hosted
+    environment: live-agent         # approval gate + deployment-branch policy
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Validate caps
+        env:
+          MAX_TURNS: ${{ inputs.max_turns }}
+          MAX_TOKENS: ${{ inputs.max_tokens }}
+        run: |
+          python3 - "$MAX_TURNS" "$MAX_TOKENS" <<'PY'
+          import sys
+          for name, raw in (("max_turns", sys.argv[1]), ("max_tokens", sys.argv[2])):
+              try:
+                  value = int(raw)
+              except ValueError:
+                  sys.exit(f"{name} must be a positive integer, got {raw!r}")
+              if value <= 0:
+                  sys.exit(f"{name} must be a positive integer, got {value}")
+          PY
+
+      - name: Checkout
+        # Pin verified via GitHub API (release commit).
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Build tester image
+        run: docker build -f docker/tester/Dockerfile -t "$TESTER_IMAGE" .
+
+      - name: Run live agent on Task 01
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MODEL: ${{ inputs.model }}
+          MAX_TURNS: ${{ inputs.max_turns }}
+          MAX_TOKENS: ${{ inputs.max_tokens }}
+        run: >-
+          python scripts/run_agent.py
+          --live
+          --model "$MODEL"
+          --max-turns "$MAX_TURNS"
+          --max-tokens "$MAX_TOKENS"
+          --artifacts live-run-artifacts
+
+      - name: Upload reports
+        if: always()
+        # Pin verified via GitHub API (release commit).
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: task-01-live-run
+          path: live-run-artifacts
+          if-no-files-found: error
+          retention-days: 14
