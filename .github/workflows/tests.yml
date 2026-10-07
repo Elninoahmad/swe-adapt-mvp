@@ -39,3 +39,5 @@ jobs:
           path: mock-run-artifacts/
       - name: Run report tests
         run: python -m pytest tests/test_report.py -v
+      - name: Run fake-client adapter tests
+        run: python -m pytest tests/test_adapter.py -v
