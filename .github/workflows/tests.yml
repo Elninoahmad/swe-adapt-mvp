@@ -57,3 +57,5 @@ jobs:
             --cap-drop ALL --security-opt no-new-privileges \
             -v "$tempdir:/workspace:ro" \
             swe-adapt-tester pytest /smoke -v
+      - name: Verify Docker pause runner
+        run: python -m pytest tests/test_docker_runner.py tests/test_live_mode.py tests/test_docker_integration.py -v
