@@ -20,3 +20,10 @@ jobs:
         run: |
           cd tasks/task_01_extract_and_type/repo
           python -m pytest tests -v
+      - name: Verify acceptance tests fail on starter
+        run: |
+          python -m pip install -r tasks/task_01_extract_and_type/requirements-acceptance.txt
+          python -m pytest tasks/task_01_extract_and_type/tests_acceptance -q > acceptance-baseline.txt 2>&1 && exit 1 || status=$?
+          cat acceptance-baseline.txt
+          test "$status" -eq 1
+          grep -q "4 failed, 2 passed" acceptance-baseline.txt
