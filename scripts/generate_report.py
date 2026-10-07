@@ -138,14 +138,21 @@ def _build_label(mode: str, status: str) -> str:
 
 
 def _write_partial_report(artifacts_dir: Path, label: str, mode: str, status: str):
-    """Write a partial report when an error-incomplete run produced no artifacts."""
+    """Write a partial report when an incomplete run produced no usable artifacts."""
+    trace_path = artifacts_dir / "trace.jsonl"
+    if trace_path.exists():
+        entries = _parse_trace(trace_path)
+        writes_after, change_event_seen = _count_writes_after_change_event(entries)
+    else:
+        writes_after, change_event_seen = None, None
+
     report = {
         "mode": mode,
         "run_status": status,
         "label": label,
         "final_acceptance_result": "NOT RUN",
-        "change_event_seen": False,
-        "writes_after_change_event": 0,
+        "change_event_seen": change_event_seen,
+        "writes_after_change_event": writes_after,
         "post_pause_source_line_churn": None,
     }
 
@@ -160,13 +167,17 @@ def _write_partial_report(artifacts_dir: Path, label: str, mode: str, status: st
         f.write("## Final Acceptance Result\n\n")
         f.write("- **Status:** NOT RUN\n\n")
         f.write("## Actions After Change Event\n\n")
-        f.write("- **Writes after change event:** unavailable (no trace)\n")
-        f.write("- **Change event delivered:** unknown (no trace)\n\n")
+        if writes_after is None:
+            f.write("- **Writes after change event:** unavailable (no trace)\n")
+            f.write("- **Change event delivered:** unknown (no trace)\n\n")
+        else:
+            f.write(f"- **Writes after change event:** {writes_after}\n")
+            f.write(f"- **Change event delivered:** {change_event_seen}\n\n")
         f.write("## Post-Pause Source-Line Churn\n\n")
         f.write("- **Status:** unavailable (no pause snapshot / final workspace)\n\n")
         f.write("### Scope and Limitations\n\n")
-        f.write("The run ended with an error before a trace or workspace snapshot ")
-        f.write("was produced, so acceptance, write counts, and churn could not be measured.\n")
+        f.write("The run ended before a full trace and workspace snapshot were ")
+        f.write("produced, so acceptance and churn could not be fully measured.\n")
 
     print(f"Report saved to: {json_path}")
     print(f"Report saved to: {md_path}")
@@ -179,7 +190,7 @@ def generate(artifacts_dir: Path, acceptance_exit_code, mode: str = "scripted-mo
 
     label = _build_label(mode, status)
 
-    if status == "incomplete_error" and (
+    if status in ("incomplete_turn_limit", "incomplete_error") and (
         not trace_path.exists() or not pause_dir.exists() or not final_dir.exists()
     ):
         _write_partial_report(artifacts_dir, label, mode, status)
