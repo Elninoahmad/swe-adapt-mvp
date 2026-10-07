@@ -29,7 +29,16 @@ class Orchestrator:
         workspace_src: Path,
         change_event_src: Path,
         trace_path: Path | None = None,
+        test_runner=None,
+        live_mode: bool = False,
     ):
+        if live_mode:
+            if test_runner is None:
+                raise ValueError("Live mode requires an explicit test_runner")
+            from harness.test_runner import DockerTestRunner
+            if not isinstance(test_runner, DockerTestRunner):
+                raise ValueError("Live mode requires a DockerTestRunner")
+
         self.workspace = Path(tempfile.mkdtemp()) / "workspace"
         shutil.copytree(workspace_src, self.workspace)
 
@@ -40,6 +49,8 @@ class Orchestrator:
         self.turn = 0
         self.pause_injected = False
         self.conversation: list[dict[str, Any]] = []
+        self.test_runner = test_runner
+        self.live_mode = live_mode
 
         if self.trace_path:
             self.trace_path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,7 +106,7 @@ class Orchestrator:
         self._check_pause()
 
     def _check_pause(self) -> None:
-        paused, reason = is_paused(self.workspace)
+        paused, reason = is_paused(self.workspace, test_runner=self.test_runner)
         self._log("pause_check", {"paused": paused, "reason": reason})
         if paused and not self.pause_injected:
             self._inject_change_event()
