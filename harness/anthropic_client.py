@@ -43,17 +43,15 @@ class _DefaultHttpTransport:
             with urllib.request.urlopen(req, timeout=self.TIMEOUT) as resp:
                 body = resp.read()
         except urllib.error.HTTPError as exc:
-            # Non-2xx response: raise even if body is not shaped like {"type":"error"}
-            body = exc.read()
-            try:
-                body_text = body.decode()
-            except UnicodeDecodeError:
-                body_text = "<binary response>"
-            raise AnthropicApiError(f"HTTP {exc.code}: {body_text}") from exc
-        except urllib.error.URLError as exc:
-            # Network error (timeout, connection refused, etc.)
-            # exc.reason does not contain the API key.
-            raise AnthropicApiError(f"Network error: {exc.reason}") from exc
+            if 400 <= exc.code < 500:
+                category = "client error"
+            elif 500 <= exc.code < 600:
+                category = "server error"
+            else:
+                category = "request failed"
+            raise AnthropicApiError(f"HTTP {exc.code}: {category}") from None
+        except urllib.error.URLError:
+            raise AnthropicApiError("Network error: connection failed") from None
 
         try:
             return json.loads(body)
@@ -63,6 +61,16 @@ class _DefaultHttpTransport:
 
 class AnthropicClient:
     BASE_URL = "https://api.anthropic.com/v1/messages"
+
+    _KNOWN_ERROR_TYPES = {
+        "invalid_request_error",
+        "authentication_error",
+        "permission_error",
+        "not_found_error",
+        "rate_limit_error",
+        "api_error",
+        "overloaded_error",
+    }
 
     TOOLS = [
         {
@@ -142,10 +150,12 @@ class AnthropicClient:
 
         raw = self.http.post(self.BASE_URL, headers, payload)
 
-        # 2xx response with structured error body
         if isinstance(raw, dict) and raw.get("type") == "error":
-            err = raw["error"]
-            raise AnthropicApiError(f"{err.get('type')}: {err.get('message')}")
+            err_type = raw.get("error", {}).get("type", "unknown")
+            safe_type = (
+                err_type if err_type in self._KNOWN_ERROR_TYPES else "provider_error"
+            )
+            raise AnthropicApiError(f"Provider error: {safe_type}") from None
 
         return _parse_response(raw)
 
