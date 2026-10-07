@@ -59,6 +59,8 @@ class DockerTestRunner:
             "docker", "run",
             "--network", "none",
             "--rm",
+            "--pull=never",
+
             "--name", container_name,
             "-v", f"{repo.resolve()}:/workspace",
             "-w", "/workspace",
@@ -152,6 +154,8 @@ class DockerAcceptanceRunner:
             "docker", "run",
             "--network", "none",
             "--rm",
+            "--pull=never",
+
             "--name", container_name,
             "-v", f"{workspace.resolve()}:/workspace:ro",
             "-v", f"{acceptance_dir.resolve()}:/tests_acceptance:ro",
