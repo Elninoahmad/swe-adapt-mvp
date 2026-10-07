@@ -67,3 +67,5 @@ jobs:
         run: python -m pytest tests/test_generate_report.py -v
       - name: Task 01 dry-run CLI tests
         run: python -m pytest tests/test_run_agent_cli.py -v
+      - name: Verify Docker never pulls images
+        run: python -m pytest tests/test_no_pull.py -v
