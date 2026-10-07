@@ -16,3 +16,7 @@ jobs:
         run: python -m pip install pytest==8.3.3
       - name: Run pause-condition tests
         run: python -m pytest tests/test_pause_condition.py -v
+      - name: Run Task 01 starter tests
+        run: |
+          cd tasks/task_01_extract_and_type/repo
+          python -m pytest tests -v
