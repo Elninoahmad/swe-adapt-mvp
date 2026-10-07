@@ -2,8 +2,6 @@
 """Demo: scripted mock run for SWE-Adapt Task 01.
 
 SCRIPTED MOCK RUN — not a real agent result.
-A hardcoded sequence of write_file calls simulates an agent
-refactoring the starter repo, pausing, and adapting to a change event.
 """
 
 import os
@@ -33,7 +31,6 @@ def main():
 
     orch = Orchestrator(repo, change_event, trace_path)
 
-    # Step 1: Extract shared validator (no types yet)
     print("\n[SCRIPTED MOCK RUN] Step 1: write validators.py")
     orch.run_step(
         "write_file",
@@ -45,7 +42,6 @@ def main():
         ),
     )
 
-    # Step 2: Refactor email_service.py
     print("[SCRIPTED MOCK RUN] Step 2: write email_service.py")
     orch.run_step(
         "write_file",
@@ -59,7 +55,6 @@ def main():
         ),
     )
 
-    # Step 3: Refactor user_service.py → triggers pause
     print("[SCRIPTED MOCK RUN] Step 3: write user_service.py (triggers pause)")
     orch.run_step(
         "write_file",
@@ -76,7 +71,6 @@ def main():
     assert orch.pause_injected, "Pause should have fired after user_service.py"
     print("[SCRIPTED MOCK RUN] Pause detected. Change event injected.")
 
-    # Step 4: Respond to change event — typed validator with plus-address support
     print("[SCRIPTED MOCK RUN] Step 4: update validators.py for change event")
     orch.run_step(
         "write_file",
@@ -90,7 +84,6 @@ def main():
 
     print("[SCRIPTED MOCK RUN] Mock agent sequence complete.")
 
-    # Collect artifacts into a known directory for GitHub Actions
     artifacts = ROOT / "mock-run-artifacts"
     if artifacts.exists():
         shutil.rmtree(artifacts)
@@ -102,10 +95,13 @@ def main():
     if pause_src.exists():
         shutil.copytree(pause_src, artifacts / "pause-snapshot")
 
+    final_dst = artifacts / "final-workspace"
+    shutil.copytree(orch.workspace, final_dst)
+
     print(f"[SCRIPTED MOCK RUN] Trace saved to: {artifacts / 'trace.jsonl'}")
     print(f"[SCRIPTED MOCK RUN] Pause snapshot saved to: {artifacts / 'pause-snapshot'}")
+    print(f"[SCRIPTED MOCK RUN] Final workspace saved to: {final_dst}")
 
-    # Run acceptance tests against the final workspace
     print("\n[SCRIPTED MOCK RUN] Running acceptance tests against final workspace...")
     env = os.environ.copy()
     env["SWE_ADAPT_REPO"] = str(orch.workspace)
@@ -128,6 +124,23 @@ def main():
         sys.exit(1)
 
     print("[SCRIPTED MOCK RUN] Acceptance tests PASSED")
+
+    print("\n[SCRIPTED MOCK RUN] Generating report...")
+    report_result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "generate_report.py"),
+         "--artifacts", str(artifacts),
+         "--acceptance-exit-code", "0"],
+        capture_output=True,
+        text=True,
+    )
+    print(report_result.stdout)
+    if report_result.stderr:
+        print(report_result.stderr)
+
+    if report_result.returncode != 0:
+        print("[SCRIPTED MOCK RUN] Report generation FAILED")
+        sys.exit(1)
+
     print("=" * 60)
     print("END OF SCRIPTED MOCK RUN")
     print("=" * 60)
