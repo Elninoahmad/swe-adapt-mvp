@@ -126,7 +126,7 @@ def test_docker_no_host_secrets_in_command():
         assert "ANTHROPIC" not in flag
         assert "GITHUB" not in flag
         assert "SECRET" not in flag
-        assert "=" not in flag or flag in ("-e", "PYTHONUNBUFFERED=1")
+        assert "=" not in flag or flag in ("-e", "PYTHONUNBUFFERED=1", "--pull=never")
 
 
 def test_local_runner_still_works(tmp_path: Path):
