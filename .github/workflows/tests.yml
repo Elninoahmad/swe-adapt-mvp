@@ -27,3 +27,5 @@ jobs:
           cat acceptance-baseline.txt
           test "$status" -eq 1
           grep -q "4 failed, 2 passed" acceptance-baseline.txt
+      - name: Run mock orchestrator tests
+        run: python -m pytest tests/test_orchestrator.py -v
