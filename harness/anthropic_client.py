@@ -125,10 +125,16 @@ class AnthropicClient:
         api_key: str,
         model: str,
         http_transport: HttpTransport | None = None,
+        max_tokens: int = 4096,
     ):
+        if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens <= 0:
+            raise ValueError(
+                f"max_tokens must be a positive integer, got {max_tokens!r}"
+            )
         self.api_key = api_key
         self.model = model
         self.http = http_transport or _DefaultHttpTransport()
+        self.max_tokens = max_tokens
 
     def send(
         self,
@@ -137,7 +143,7 @@ class AnthropicClient:
     ) -> AgentResponse:
         payload = {
             "model": self.model,
-            "max_tokens": 4096,
+            "max_tokens": self.max_tokens,
             "system": system_prompt,
             "messages": messages,
             "tools": self.TOOLS,
