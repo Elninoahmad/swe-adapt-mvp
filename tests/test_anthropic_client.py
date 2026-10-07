@@ -354,3 +354,44 @@ def test_default_transport_invalid_json(monkeypatch):
 
     full_exc = "".join(traceback.format_exception(exc_info.value))
     assert dummy_key not in full_exc
+
+
+class _RecordingTransport:
+    """Captures requests and returns a minimal valid text response."""
+
+    def __init__(self):
+        self.calls = []
+
+    def post(self, url, headers, json_data):
+        self.calls.append({"url": url, "headers": headers, "json_data": json_data})
+        return {"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn"}
+
+
+def test_max_tokens_defaults_to_4096():
+    transport = _RecordingTransport()
+    client = AnthropicClient("key", "model", http_transport=transport)
+
+    client.send("sys", [{"role": "user", "content": "hi"}])
+
+    assert transport.calls[0]["json_data"]["max_tokens"] == 4096
+
+
+def test_configured_max_tokens_applied_to_every_request():
+    transport = _RecordingTransport()
+    client = AnthropicClient(
+        "key", "model", http_transport=transport, max_tokens=512
+    )
+
+    client.send("sys", [{"role": "user", "content": "hi"}])
+    client.send("sys", [{"role": "user", "content": "again"}])
+
+    assert len(transport.calls) == 2
+    assert all(c["json_data"]["max_tokens"] == 512 for c in transport.calls)
+
+
+@pytest.mark.parametrize("bad", [0, -1, 4096.0, "4096", None, True])
+def test_invalid_max_tokens_rejected_before_any_request(bad):
+    transport = _RecordingTransport()
+    with pytest.raises(ValueError):
+        AnthropicClient("key", "model", http_transport=transport, max_tokens=bad)
+    assert transport.calls == []
