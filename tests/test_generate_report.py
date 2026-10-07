@@ -140,3 +140,26 @@ def test_markdown_headings_work_for_all_modes(tmp_path):
         md = (artifacts / "report.md").read_text()
         assert md.startswith(expected)
         assert "## Actions After Change Event" in md
+
+
+def test_incomplete_turn_limit_with_trace_but_no_snapshot_writes_partial_report(tmp_path):
+    artifacts = tmp_path / "partial-artifacts"
+    artifacts.mkdir()
+    (artifacts / "trace.jsonl").write_text(
+        '{"event": "start"}\n'
+        '{"event": "change_event_injected"}\n'
+        '{"event": "write_file", "path": "app.py"}\n'
+    )
+
+    generate(artifacts, 1, mode="live", status="incomplete_turn_limit")
+
+    report = json.loads((artifacts / "report.json").read_text())
+    assert "INCOMPLETE" in report["label"]
+    assert report["final_acceptance_result"] == "NOT RUN"
+    assert report["change_event_seen"] is True
+    assert report["writes_after_change_event"] == 1
+    assert report["post_pause_source_line_churn"] is None
+
+    md = (artifacts / "report.md").read_text()
+    assert "**Writes after change event:** 1" in md
+    assert "unavailable (no trace)" not in md
