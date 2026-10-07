@@ -1,5 +1,6 @@
 """Test runners for pause-condition and acceptance checks."""
 
+import os
 import subprocess
 import sys
 import uuid
@@ -11,6 +12,28 @@ class DockerInfrastructureError(Exception):
 
     Distinct from pytest failures inside a successfully started container.
     """
+
+
+# Minimal environment forwarded to Docker CLI subprocesses.  Avoids
+# inheriting parent-process secrets (e.g. ANTHROPIC_API_KEY) while keeping
+# the Docker connection working on GitHub-hosted Ubuntu (PATH/HOME/LANG)
+# and with custom daemons (DOCKER_* client config).
+_DOCKER_ENV_ALLOWLIST = (
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "DOCKER_HOST",
+    "DOCKER_CONFIG",
+    "DOCKER_TLS_VERIFY",
+    "DOCKER_CERT_PATH",
+    "DOCKER_API_VERSION",
+)
+
+
+def _docker_env() -> dict[str, str]:
+    """Explicit minimal environment for Docker CLI subprocesses."""
+    return {k: v for k, v in os.environ.items() if k in _DOCKER_ENV_ALLOWLIST}
 
 
 class LocalTestRunner:
@@ -83,6 +106,7 @@ class DockerTestRunner:
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
+                env=_docker_env(),
             )
         except subprocess.TimeoutExpired:
             try:
@@ -91,6 +115,7 @@ class DockerTestRunner:
                     capture_output=True,
                     text=True,
                     timeout=10,
+                    env=_docker_env(),
                 )
             except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
                 raise DockerInfrastructureError(
@@ -183,6 +208,7 @@ class DockerAcceptanceRunner:
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
+                env=_docker_env(),
             )
         except subprocess.TimeoutExpired:
             try:
@@ -191,6 +217,7 @@ class DockerAcceptanceRunner:
                     capture_output=True,
                     text=True,
                     timeout=10,
+                    env=_docker_env(),
                 )
             except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
                 raise DockerInfrastructureError(
