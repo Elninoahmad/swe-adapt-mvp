@@ -238,3 +238,120 @@ def test_message_ordering(tmp_path: Path) -> None:
     text_blocks = [b for b in user_content if b.get("type") == "text"]
     assert len(text_blocks) == 1
     assert "Change event text." in text_blocks[0]["text"]
+
+
+def test_natural_completion_after_event(tmp_path: Path) -> None:
+    """Agent completes naturally after receiving the change event."""
+    repo = _build_almost_paused_repo(tmp_path)
+    ce = tmp_path / "CHANGE_EVENT.md"
+    ce.write_text("Change event.")
+
+    orch = Orchestrator(repo, ce)
+
+    responses = [
+        FakeResponse(
+            tool_uses=[
+                {
+                    "id": "tu_01",
+                    "name": "write_file",
+                    "input": {
+                        "path": "validators.py",
+                        "content": (
+                            "import re\n\n"
+                            "def validate_email(address):\n"
+                            "    return bool(re.match(r'^[\\w\\.-]+@[\\w\\.-]+\\.\\w+$', address))\n"
+                        ),
+                    },
+                },
+                {
+                    "id": "tu_02",
+                    "name": "write_file",
+                    "input": {
+                        "path": "email_service.py",
+                        "content": (
+                            "from validators import validate_email\n\n"
+                            "def send_email(address):\n"
+                            '    if not validate_email(address):\n'
+                            '        raise ValueError("Invalid email")\n'
+                            '    return f"Sent to {address}"\n'
+                        ),
+                    },
+                },
+                {
+                    "id": "tu_03",
+                    "name": "write_file",
+                    "input": {
+                        "path": "user_service.py",
+                        "content": (
+                            "from validators import validate_email\n\n"
+                            "def create_user(email):\n"
+                            '    if not validate_email(email):\n'
+                            '        raise ValueError("Invalid email")\n'
+                            '    return {"email": email, "created": True}\n'
+                        ),
+                    },
+                },
+            ]
+        ),
+        FakeResponse(text="Done."),
+    ]
+
+    client = FakeClient(responses)
+    adapter = Adapter(orch, client, max_turns=10)
+    result = adapter.run("Sys", "Task")
+
+    assert result.completed is True
+    assert result.turn_limit_reached is False
+    assert orch.pause_injected is True
+
+
+def test_max_turns_exhausted(tmp_path: Path) -> None:
+    """Agent never completes; loop hits max_turns."""
+    repo = _build_almost_paused_repo(tmp_path)
+    ce = tmp_path / "CHANGE_EVENT.md"
+    ce.write_text("Change event.")
+
+    orch = Orchestrator(repo, ce)
+
+    # Infinite tool-use loop: never sends text, never pauses
+    responses = [
+        FakeResponse(
+            tool_uses=[
+                {
+                    "id": f"tu_{i:02d}",
+                    "name": "write_file",
+                    "input": {"path": "dummy.txt", "content": f"turn {i}\n"},
+                }
+            ]
+        )
+        for i in range(5)
+    ]
+
+    client = FakeClient(responses)
+    adapter = Adapter(orch, client, max_turns=3)
+    result = adapter.run("Sys", "Task")
+
+    assert result.completed is False
+    assert result.turn_limit_reached is True
+    assert orch.pause_injected is False
+    assert client.call_count == 3
+
+
+def test_text_only_before_pause(tmp_path: Path) -> None:
+    """Agent returns text before any write triggers the pause.
+    completed=True, but pause_injected=False so the CLI can reject it."""
+    repo = _build_almost_paused_repo(tmp_path)
+    ce = tmp_path / "CHANGE_EVENT.md"
+    ce.write_text("Change event.")
+
+    orch = Orchestrator(repo, ce)
+
+    responses = [FakeResponse(text="I don't need to change anything.")]
+
+    client = FakeClient(responses)
+    adapter = Adapter(orch, client, max_turns=10)
+    result = adapter.run("Sys", "Task")
+
+    assert result.completed is True
+    assert result.turn_limit_reached is False
+    assert orch.pause_injected is False
