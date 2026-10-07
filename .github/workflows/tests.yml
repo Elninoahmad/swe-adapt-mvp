@@ -41,3 +41,5 @@ jobs:
         run: python -m pytest tests/test_report.py -v
       - name: Run fake-client adapter tests
         run: python -m pytest tests/test_adapter.py -v
+      - name: Run mocked Anthropic client tests
+        run: python -m pytest tests/test_anthropic_client.py -v
