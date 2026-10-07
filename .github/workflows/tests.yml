@@ -29,3 +29,5 @@ jobs:
           grep -q "4 failed, 2 passed" acceptance-baseline.txt
       - name: Run mock orchestrator tests
         run: python -m pytest tests/test_orchestrator.py -v
+      - name: Run scripted mock demo
+        run: python scripts/demo_mock_run.py
