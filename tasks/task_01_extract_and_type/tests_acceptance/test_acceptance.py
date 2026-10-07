@@ -1,10 +1,14 @@
+import os 
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).parent.parent / "repo"
+REPO = Path(
+    os.environ.get("SWE_ADAPT_REPO", Path(__file__).parent.parent / "repo")
+)
+
 MYPY_TIMEOUT = 30
 
 
