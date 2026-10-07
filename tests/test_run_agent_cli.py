@@ -18,6 +18,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import scripts.run_agent as run_agent
 
+# Clearly fake value; only used to prove the preflight subprocess
+# environment does not inherit parent-process secrets.
+DUMMY_KEY = "sk-ant-dummy-not-a-real-key"
+
 
 def _run_cli(artifacts: Path, *extra_args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -105,25 +109,39 @@ def test_task_01_dry_run_cli_missing_image_fails_before_agent(tmp_path: Path):
 
 
 def _fake_docker_run_factory(calls: list, info_rc: int = 0, inspect_rc: int = 0):
-    def fake_run(cmd, capture_output, text, timeout):
-        calls.append(cmd)
+    def fake_run(cmd, capture_output, text, timeout, env=None):
+        calls.append({"cmd": cmd, "env": env})
         if cmd[1] == "info":
             return types.SimpleNamespace(returncode=info_rc, stderr="")
         return types.SimpleNamespace(returncode=inspect_rc, stderr="")
     return fake_run
 
 
+def _assert_preflight_env_sanitized(calls):
+    assert calls, "expected preflight subprocess calls"
+    for call in calls:
+        assert call["env"] is not None, "preflight subprocess inherited parent env"
+        assert "ANTHROPIC_API_KEY" not in call["env"]
+        assert "PATH" in call["env"]
+
+
 def test_docker_preflight_passes_when_daemon_up_and_image_present(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", DUMMY_KEY)
     calls = []
     monkeypatch.setattr(
         run_agent, "subprocess",
         types.SimpleNamespace(run=_fake_docker_run_factory(calls)),
     )
     run_agent._docker_preflight("swe-adapt-tester")
-    assert calls == [["docker", "info"], ["docker", "image", "inspect", "swe-adapt-tester"]]
+    assert [c["cmd"] for c in calls] == [
+        ["docker", "info"],
+        ["docker", "image", "inspect", "swe-adapt-tester"],
+    ]
+    _assert_preflight_env_sanitized(calls)
 
 
 def test_docker_preflight_missing_image_raises_and_never_pulls(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", DUMMY_KEY)
     calls = []
     monkeypatch.setattr(
         run_agent, "subprocess",
@@ -131,10 +149,12 @@ def test_docker_preflight_missing_image_raises_and_never_pulls(monkeypatch):
     )
     with pytest.raises(run_agent.DockerInfrastructureError, match="refusing to pull"):
         run_agent._docker_preflight("missing-image")
-    assert all("pull" not in cmd for cmd in calls)
+    assert all("pull" not in c["cmd"] for c in calls)
+    _assert_preflight_env_sanitized(calls)
 
 
 def test_docker_preflight_unreachable_daemon_raises(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", DUMMY_KEY)
     calls = []
     monkeypatch.setattr(
         run_agent, "subprocess",
@@ -143,4 +163,5 @@ def test_docker_preflight_unreachable_daemon_raises(monkeypatch):
     with pytest.raises(run_agent.DockerInfrastructureError, match="unreachable"):
         run_agent._docker_preflight("swe-adapt-tester")
     # daemon check fails first; image inspect never attempted
-    assert calls == [["docker", "info"]]
+    assert [c["cmd"] for c in calls] == [["docker", "info"]]
+    _assert_preflight_env_sanitized(calls)
