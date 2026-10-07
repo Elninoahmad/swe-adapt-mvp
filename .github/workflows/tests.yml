@@ -59,3 +59,5 @@ jobs:
             swe-adapt-tester pytest /smoke -v
       - name: Verify Docker pause runner
         run: python -m pytest tests/test_docker_runner.py tests/test_live_mode.py tests/test_docker_integration.py -v
+      - name: Verify Docker final acceptance
+        run: python -m pytest tests/test_docker_acceptance.py -v
