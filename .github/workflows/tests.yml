@@ -69,3 +69,5 @@ jobs:
         run: python -m pytest tests/test_run_agent_cli.py -v
       - name: Verify Docker never pulls images
         run: python -m pytest tests/test_no_pull.py -v
+      - name: Verify Docker subprocess environment
+        run: python -m pytest tests/test_docker_env.py -v
