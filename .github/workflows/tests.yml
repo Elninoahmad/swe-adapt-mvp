@@ -31,3 +31,9 @@ jobs:
         run: python -m pytest tests/test_orchestrator.py -v
       - name: Run scripted mock demo
         run: python scripts/demo_mock_run.py
+      - name: Upload scripted mock artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scripted-mock-artifacts
+          path: mock-run-artifacts/
