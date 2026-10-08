@@ -231,14 +231,20 @@ def run(artifacts_dir, image, max_turns, timeout, acceptance_timeout,
         _docker_preflight(image)
     except DockerInfrastructureError as exc:
         print(f"docker preflight failed: {exc}", file=sys.stderr)
-        generate(artifacts_dir, None, mode=mode, status="incomplete_error")
+        generate(
+            artifacts_dir, None, mode=mode, status="incomplete_error",
+            starter_dir=TASK_DIR / "repo",
+        )
         return EXIT_DOCKER_FAILURE
 
     try:
         client = build_client(live=live, model=model, max_tokens=max_tokens)
     except LiveConfigError as exc:
         print(f"live configuration error: {exc}", file=sys.stderr)
-        generate(artifacts_dir, None, mode=mode, status="incomplete_error")
+        generate(
+            artifacts_dir, None, mode=mode, status="incomplete_error",
+            starter_dir=TASK_DIR / "repo",
+        )
         return EXIT_API_FAILURE
 
     pause_runner = DockerTestRunner(image=image, timeout=timeout)
@@ -294,7 +300,11 @@ def run(artifacts_dir, image, max_turns, timeout, acceptance_timeout,
             _copy_dir(snapshot, artifacts_dir / "pause-snapshot")
         _copy_dir(orch.workspace, artifacts_dir / "final-workspace")
 
-        generate(artifacts_dir, exit_code, mode=mode, status=status)
+        generate(
+            artifacts_dir, exit_code, mode=mode, status=status,
+            starter_dir=TASK_DIR / "repo",
+        )
+
         return rc
     finally:
         shutil.rmtree(temp_root, ignore_errors=True)
