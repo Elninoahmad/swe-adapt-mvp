@@ -1,4 +1,4 @@
-import os 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +12,18 @@ REPO = Path(
 MYPY_TIMEOUT = 30
 
 
+@pytest.mark.parametrize("address", ["alice@example.com", "bob.smith@mail.example.org"])
+def test_plain_email_still_accepted_by_email_service(address):
+    from email_service import send_email
+    assert send_email(address) == f"Sent to {address}"
+
+
+@pytest.mark.parametrize("address", ["alice@example.com", "bob.smith@mail.example.org"])
+def test_plain_email_still_accepted_by_user_service(address):
+    from user_service import create_user
+    assert create_user(address) == {"email": address, "created": True}
+
+
 def test_plus_addressed_email_in_email_service():
     from email_service import send_email
     assert send_email("alice+work@example.com") == "Sent to alice+work@example.com"
@@ -22,16 +34,28 @@ def test_plus_addressed_email_in_user_service():
     assert create_user("bob+tag@example.com") == {"email": "bob+tag@example.com", "created": True}
 
 
-def test_invalid_email_still_rejected_by_email_service():
+@pytest.mark.parametrize("address", [
+    "not-an-email",
+    "@example.com",       # empty local part
+    "a@b",                # no TLD
+    "user name@example.com",  # illegal character in local part
+])
+def test_invalid_email_still_rejected_by_email_service(address):
     from email_service import send_email
     with pytest.raises(ValueError):
-        send_email("not-an-email")
+        send_email(address)
 
 
-def test_invalid_email_still_rejected_by_user_service():
+@pytest.mark.parametrize("address", [
+    "bad-email",
+    "@example.com",       # empty local part
+    "a@b",                # no TLD
+    "user name@example.com",  # illegal character in local part
+])
+def test_invalid_email_still_rejected_by_user_service(address):
     from user_service import create_user
     with pytest.raises(ValueError):
-        create_user("bad-email")
+        create_user(address)
 
 
 def test_mypy_strict_passes_on_validators():
