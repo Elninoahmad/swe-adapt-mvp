@@ -4,12 +4,25 @@
 Reads the trace, pause snapshot, and final workspace produced by
 demo_mock_run.py.  Computes post-pause source-line churn and writes
 report.json + report.md into the artifacts directory.
+
+When --starter is supplied and the starter, pause, and final directories
+all exist, the report also includes an exact-line work-retention proxy
+(verbatim preservation of pre-pause work, baseline-reserved).  When a
+requested snapshot is missing, the proxy is reported as a structured
+unavailable status with a reason — never a numeric zero.
 """
 
 import argparse
 import json
 import difflib
+import sys
 from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from harness.work_retention import compute_work_retention
 
 _VALID_MODES = ("scripted-mock", "dry-run", "live")
 _VALID_STATUSES = ("completed", "incomplete_turn_limit", "incomplete_error")
@@ -95,9 +108,9 @@ def _compute_churn(pause_dir: Path, final_dir: Path):
             tofile=str(rel),
         ))
         for line in diff:
-            if line.startswith('+') and not line.startswith('+++'):
+            if line.startswith("+") and not line.startswith("+++"):
                 added_lines += 1
-            elif line.startswith('-') and not line.startswith('---'):
+            elif line.startswith("-") and not line.startswith("---"):
                 removed_lines += 1
 
     for rel in final_files:
@@ -137,7 +150,44 @@ def _build_label(mode: str, status: str) -> str:
     return "LIVE AGENT RUN — INCOMPLETE: error"
 
 
-def _write_partial_report(artifacts_dir: Path, label: str, mode: str, status: str):
+def _work_retention_block(starter_dir, pause_dir: Path, final_dir: Path) -> dict:
+    """Preservation-proxy block; structured unavailable status when inputs
+    are missing (never a numeric zero pretending to be the metric)."""
+    starter_dir = Path(starter_dir)
+    if not starter_dir.exists():
+        return {"status": "unavailable", "kind": "preservation_proxy",
+                "reason": "starter directory not found"}
+    if not pause_dir.exists():
+        return {"status": "unavailable", "kind": "preservation_proxy",
+                "reason": "no pause snapshot"}
+    if not final_dir.exists():
+        return {"status": "unavailable", "kind": "preservation_proxy",
+                "reason": "no final workspace"}
+    block = dict(compute_work_retention(starter_dir, pause_dir, final_dir))
+    block["status"] = "ok"
+    block["kind"] = "preservation_proxy"
+    return block
+
+
+def _write_retention_md(f, retention: dict) -> None:
+    f.write("## Work Retention (Preservation Proxy)\n\n")
+    if retention["status"] == "ok":
+        f.write(f"- **Work units:** {retention['work_units']}\n")
+        f.write(f"- **Retained units:** {retention['retained_units']}\n")
+        f.write(f"- **Lost units:** {retention['lost_units']}\n")
+        ratio = retention["work_retention_verbatim"]
+        ratio_text = f"{ratio:.4f}" if ratio is not None else "n/a (no pre-pause additions)"
+        f.write(f"- **Verbatim retention:** {ratio_text}\n\n")
+    else:
+        f.write(f"- **Status:** unavailable — {retention['reason']}\n\n")
+    f.write("Exact-line, same-file proxy for verbatim preservation of pre-pause ")
+    f.write("work; baseline-reserved, no fuzzy matching.  Lines changed in response ")
+    f.write("to the change event count as lost by design.  This is not a measure ")
+    f.write("of rework or wasted effort; read it next to post-pause churn.\n\n")
+
+
+def _write_partial_report(artifacts_dir: Path, label: str, mode: str, status: str,
+                          starter_dir=None):
     """Write a partial report when an incomplete run produced no usable artifacts."""
     trace_path = artifacts_dir / "trace.jsonl"
     if trace_path.exists():
@@ -145,6 +195,12 @@ def _write_partial_report(artifacts_dir: Path, label: str, mode: str, status: st
         writes_after, change_event_seen = _count_writes_after_change_event(entries)
     else:
         writes_after, change_event_seen = None, None
+
+    retention = None
+    if starter_dir is not None:
+        retention = _work_retention_block(
+            starter_dir, artifacts_dir / "pause-snapshot", artifacts_dir / "final-workspace"
+        )
 
     report = {
         "mode": mode,
@@ -155,6 +211,8 @@ def _write_partial_report(artifacts_dir: Path, label: str, mode: str, status: st
         "writes_after_change_event": writes_after,
         "post_pause_source_line_churn": None,
     }
+    if retention is not None:
+        report["work_retention"] = retention
 
     json_path = artifacts_dir / "report.json"
     with open(json_path, "w") as f:
@@ -175,6 +233,8 @@ def _write_partial_report(artifacts_dir: Path, label: str, mode: str, status: st
             f.write(f"- **Change event delivered:** {change_event_seen}\n\n")
         f.write("## Post-Pause Source-Line Churn\n\n")
         f.write("- **Status:** unavailable (no pause snapshot / final workspace)\n\n")
+        if retention is not None:
+            _write_retention_md(f, retention)
         f.write("### Scope and Limitations\n\n")
         f.write("The run ended before a full trace and workspace snapshot were ")
         f.write("produced, so acceptance and churn could not be fully measured.\n")
@@ -183,7 +243,9 @@ def _write_partial_report(artifacts_dir: Path, label: str, mode: str, status: st
     print(f"Report saved to: {md_path}")
 
 
-def generate(artifacts_dir: Path, acceptance_exit_code, mode: str = "scripted-mock", status: str = "completed"):
+def generate(artifacts_dir: Path, acceptance_exit_code, mode: str = "scripted-mock",
+             status: str = "completed", starter_dir=None):
+    artifacts_dir = Path(artifacts_dir)
     trace_path = artifacts_dir / "trace.jsonl"
     pause_dir = artifacts_dir / "pause-snapshot"
     final_dir = artifacts_dir / "final-workspace"
@@ -193,8 +255,12 @@ def generate(artifacts_dir: Path, acceptance_exit_code, mode: str = "scripted-mo
     if status in ("incomplete_turn_limit", "incomplete_error") and (
         not trace_path.exists() or not pause_dir.exists() or not final_dir.exists()
     ):
-        _write_partial_report(artifacts_dir, label, mode, status)
+        _write_partial_report(artifacts_dir, label, mode, status, starter_dir=starter_dir)
         return
+
+    retention = None
+    if starter_dir is not None:
+        retention = _work_retention_block(starter_dir, pause_dir, final_dir)
 
     entries = _parse_trace(trace_path)
     writes_after, change_event_seen = _count_writes_after_change_event(entries)
@@ -214,6 +280,8 @@ def generate(artifacts_dir: Path, acceptance_exit_code, mode: str = "scripted-mo
         "writes_after_change_event": writes_after,
         "post_pause_source_line_churn": churn,
     }
+    if retention is not None:
+        report["work_retention"] = retention
 
     json_path = artifacts_dir / "report.json"
     with open(json_path, "w") as f:
@@ -234,6 +302,8 @@ def generate(artifacts_dir: Path, acceptance_exit_code, mode: str = "scripted-mo
         f.write(f"- **Files compared:** {', '.join(churn['files_compared']) or 'none'}\n")
         f.write(f"- **Files excluded:** {', '.join(churn['files_excluded']) or 'none'}\n")
         f.write(f"- **Files created after pause:** {', '.join(churn['files_created_after_pause']) or 'none'}\n\n")
+        if retention is not None:
+            _write_retention_md(f, retention)
         f.write("### Scope and Limitations\n\n")
         f.write("Churn is measured only across qualifying Python source files ")
         f.write("present in the pause snapshot. Files in `tests/` or `__pycache__/`, ")
@@ -260,9 +330,16 @@ if __name__ == "__main__":
         default="0",
         help="integer exit code, or 'none' for NOT RUN",
     )
+    parser.add_argument(
+        "--starter",
+        type=Path,
+        default=None,
+        help="starter repo directory; enables the work-retention proxy",
+    )
     args = parser.parse_args()
 
     raw_code = str(args.acceptance_exit_code).strip().lower()
     acceptance_exit_code = None if raw_code == "none" else int(raw_code)
 
-    generate(args.artifacts, acceptance_exit_code, mode=args.mode, status=args.status)
+    generate(args.artifacts, acceptance_exit_code, mode=args.mode, status=args.status,
+             starter_dir=args.starter)
