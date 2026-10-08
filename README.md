@@ -69,6 +69,9 @@ This is a **coarse text-level metric, not AST-aware**, and it does not distingui
 necessary adaptation from destructive rework. It is **not a validated rework
 ratio** — treat it as instrumentation, not a score.
 
+**Work-retention proxy.** This compares the starter, pause snapshot, and final Python source files. Each nonblank, non-comment line added before the pause is a work unit. A unit is retained only if its text, ignoring surrounding whitespace, remains in the same file after reserving identical lines already in the starter. Changed lines count as lost even when the change was necessary. In the scripted mock, 5 of 7 units were retained; the two changed lines in `validators.py` addressed the new requirements. This is not a rework ratio, evidence of wasted effort, or a real-agent result.
+
+
 ## Running locally
 
 Prerequisites: Docker, and the tester image built once:
