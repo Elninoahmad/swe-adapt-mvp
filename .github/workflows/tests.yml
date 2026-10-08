@@ -73,3 +73,5 @@ jobs:
         run: python -m pytest tests/test_docker_env.py -v
       - name: Verify work-retention proxy
         run: python -m pytest tests/test_work_retention.py -v
+      - name: Verify retention in reports
+        run: python -m pytest tests/test_generate_report_retention.py -v
