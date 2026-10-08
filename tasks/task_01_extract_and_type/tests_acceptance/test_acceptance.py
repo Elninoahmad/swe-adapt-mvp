@@ -78,3 +78,40 @@ def test_refactoring_preserved():
         assert "from validators import validate_email" in source
         assert "re.match" not in source
         assert r'^[\w\.-]+@[\w\.-]+\.\w+$' not in source
+
+
+@pytest.mark.parametrize("service_module,function_name", [
+    ("email_service", "send_email"),
+    ("user_service", "create_user"),
+])
+def test_service_calls_imported_validate_email(service_module, function_name, monkeypatch):
+    import importlib
+
+    # Clean failure on the starter (no validators.py), not an import error.
+    assert (REPO / "validators.py").is_file(), "validators.py is missing"
+
+    import validators
+    service = importlib.import_module(service_module)
+
+    # `from validators import validate_email` binds the name in the service
+    # module at import time, so the spy must patch the service's own
+    # binding — patching validators.validate_email alone would miss it.
+    assert hasattr(service, "validate_email"), (
+        f"{service_module} does not import validate_email"
+    )
+
+    calls = []
+    real_validate = validators.validate_email
+
+    def spy(address, *args, **kwargs):
+        calls.append(address)
+        return real_validate(address, *args, **kwargs)
+
+    monkeypatch.setattr(service, "validate_email", spy)
+
+    getattr(service, function_name)("carol@example.com")
+
+    assert calls == ["carol@example.com"], (
+        f"{service_module} never called its imported validate_email "
+        f"(imported but unused?)"
+    )
