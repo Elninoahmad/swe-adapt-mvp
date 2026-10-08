@@ -231,10 +231,10 @@ def run(artifacts_dir, image, max_turns, timeout, acceptance_timeout,
         _docker_preflight(image)
     except DockerInfrastructureError as exc:
         print(f"docker preflight failed: {exc}", file=sys.stderr)
-       generate(
-    artifacts_dir, None, mode=mode, status="incomplete_error",
-    starter_dir=TASK_DIR / "repo",
-)
+        generate(artifacts_dir, None, mode=mode, status="incomplete_error", starter_dir=TASK_DIR / "repo")
+
+    
+
 
         return EXIT_DOCKER_FAILURE
 
