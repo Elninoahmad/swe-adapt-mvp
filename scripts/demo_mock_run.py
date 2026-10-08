@@ -129,7 +129,9 @@ def main():
     report_result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "generate_report.py"),
          "--artifacts", str(artifacts),
-         "--acceptance-exit-code", "0"],
+         "--acceptance-exit-code", "0",
+"--starter", str(repo)],
+
         capture_output=True,
         text=True,
     )
