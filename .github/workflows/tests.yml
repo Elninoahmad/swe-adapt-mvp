@@ -26,7 +26,7 @@ jobs:
           python -m pytest tasks/task_01_extract_and_type/tests_acceptance -q > acceptance-baseline.txt 2>&1 && exit 1 || status=$?
           cat acceptance-baseline.txt
           test "$status" -eq 1
-          grep -q "4 failed, 2 passed" acceptance-baseline.txt
+          grep -q "4 failed, 12 passed" acceptance-baseline.txt
       - name: Run mock orchestrator tests
         run: python -m pytest tests/test_orchestrator.py -v
       - name: Run scripted mock demo
