@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -114,4 +115,24 @@ def test_service_calls_imported_validate_email(service_module, function_name, mo
     assert calls == ["carol@example.com"], (
         f"{service_module} never called its imported validate_email "
         f"(imported but unused?)"
+    )
+
+
+def test_tests_dir_matches_starter_digest():
+    import digest_utils
+
+    baked_path = Path(__file__).parent / "starter_tests_digest.json"
+    if not baked_path.is_file():
+        pytest.fail(
+            "starter_tests_digest.json is missing; generate it with "
+            "python scripts/generate_starter_tests_digest.py"
+        )
+    baked = json.loads(baked_path.read_text())
+    live = digest_utils.compute_digest(REPO / "tests")
+    added, modified, deleted = digest_utils.diff_digests(baked, live)
+    assert added == [] and modified == [] and deleted == [], (
+        f"repo/tests/ diverged from the starter — "
+        f"added: {added or 'none'}; "
+        f"modified: {modified or 'none'}; "
+        f"deleted: {deleted or 'none'}"
     )
