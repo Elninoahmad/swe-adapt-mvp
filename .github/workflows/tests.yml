@@ -75,7 +75,5 @@ jobs:
         run: python -m pytest tests/test_work_retention.py -v
       - name: Verify retention in reports
         run: python -m pytest tests/test_generate_report_retention.py -v
-      - name: TEMP print starter tests digest
-        run: python scripts/generate_starter_tests_digest.py --out "$RUNNER_TEMP/starter_tests_digest.json" && cat "$RUNNER_TEMP/starter_tests_digest.json"
       - name: Check starter tests digest freshness
         run: python -m pytest tests/test_starter_tests_digest.py -v
