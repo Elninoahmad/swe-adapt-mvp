@@ -110,6 +110,8 @@ dry-run CLI end-to-end, and uploads its artifacts. It triggers on **push** and
    downloaded to inspect `report.json`, `report.md`, `trace.jsonl`,
    `pause-snapshot/`, and `final-workspace/` from the scripted run.
 
+**Relationship to APEX-SWE.** [APEX-SWE](https://arxiv.org/abs/2601.08806) evaluates persistent agents on Integration and Observability tasks and analyzes their execution trajectories and quality. SWE-Adapt explores a different axis: introducing a new requirement after an observable intermediate state, then examining final correctness and preservation of prior work. This MVP contains one scripted task, not a real-agent comparison with APEX-SWE.
+
 ## What is not here yet
 
 - **No real agent run.** All results to date come from scripted fake responses.
@@ -119,3 +121,5 @@ dry-run CLI end-to-end, and uploads its artifacts. It triggers on **push** and
   it has **0 runs** and **no `ANTHROPIC_API_KEY` secret is configured** — no live
   execution has ever happened, and live-agent results are not part of the current
   evidence base.
+
+
